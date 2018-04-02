@@ -174,6 +174,20 @@ use dvizh\cart\widgets\ChangeOptions;
 <?=ChangeOptions::widget(['model' => $item]);?>
 ```
 
+События
+==========
+Для того, чтобы отслеживать изменения кассы через события JavaScript, можно подписаться на них:
+
+```php
+    $(document).on("cart:added", ".order-btn", function(e, result) {
+        var button = $(e.target);
+        button.html("Добавлено");
+    })
+
+```
+
+Вы можете подписаться на события **cart:added**, **cart:deleted** и **cart:truncated** 
+
 Скидки
 ==========
 Скидки реализуются через поведение и(или) событие. Корзине можно присвоить любое поведение (в конфиге):
