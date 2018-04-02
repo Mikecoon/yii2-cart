@@ -1,3 +1,12 @@
+/**
+ *
+ * Available custom events:
+ *  cart:added fires when item was added to cart and provides action's result
+ *  cart:deleted fires when item was removed from cart and provides action's result, item's ID
+ *  cart:truncated fires when cart was truncated
+ */
+
+
 if (typeof dvizh == "undefined" || !dvizh) {
     var dvizh = {};
 }
@@ -40,7 +49,9 @@ dvizh.cart = {
                 itemPrice = jQuery(self).data('price'),
                 itemOptions = jQuery(self).data('options');
 
-            dvizh.cart.addElement(itemModelName, itemId, itemCount, itemPrice, itemOptions, url);
+            dvizh.cart.addElement(itemModelName, itemId, itemCount, itemPrice, itemOptions, url).then(function(result){
+                $(self).trigger("cart:added", result);
+            });
 
             return false;
         });
@@ -50,7 +61,9 @@ dvizh.cart = {
             var self = this,
                 url = jQuery(self).data('url');
 
-            dvizh.cart.truncate(url);
+            dvizh.cart.truncate(url).then(function(result) {
+                $(self).trigger("cart:truncated", result);
+            });
             
             return false;
         });
@@ -63,11 +76,17 @@ dvizh.cart = {
                 url = jQuery(self).data('url'),
                 elementId = jQuery(self).data('id');
 
-            dvizh.cart.deleteElement(elementId, url);
+            dvizh.cart.deleteElement(elementId, url).then(function(result){
+                $(self).trigger("cart:deleted", {
+                    elementId: elementId,
+                    result: result
+                });
 
-            if (lineSelector = jQuery(self).data('line-selector')) {
-                jQuery(self).parents(lineSelector).last().hide('slow');
-            }
+                if (lineSelector = jQuery(self).data('line-selector')) {
+                    jQuery(self).closest(lineSelector).remove();
+                }
+            });
+
 
             return false;
         });
@@ -134,9 +153,13 @@ dvizh.cart = {
     },
     deleteElement: function (elementId, url) {
 
-        dvizh.cart.sendData({elementId: elementId}, url);
-
-        return false;
+        return new Promise(function (resolve, reject)  {
+            dvizh.cart.sendData({elementId: elementId}, url).then(function(json) {
+                return resolve(json);
+            }, function(error) {
+                return reject(error);
+            })
+        })
     },
     changeInputValue: function () {
         var val = parseInt(jQuery(this).siblings('input').val());
@@ -185,21 +208,34 @@ dvizh.cart = {
     },
     addElement: function (itemModelName, itemId, itemCount, itemPrice, itemOptions, url) {
 
-        var data = {};
-        data.CartElement = {};
-        data.CartElement.model = itemModelName;
-        data.CartElement.item_id = itemId;
-        data.CartElement.count = itemCount;
-        data.CartElement.price = itemPrice;
-        data.CartElement.options = itemOptions;
+        return new Promise(function(resolve, reject) {
+            var data = {
+                CartElement: {
+                    model: itemModelName,
+                    item_id: itemId,
+                    count: itemCount,
+                    price: itemPrice,
+                    options: itemOptions,
+                }
+            };
 
-        dvizh.cart.sendData(data, url);
+            dvizh.cart.sendData(data, url).then(function(json) {
+                return resolve(json);
+            }, function(error) {
+                return reject(error);
+            })
+        })
 
-        return false;
     },
     truncate: function (url) {
-        dvizh.cart.sendData({}, url);
-        return false;
+        return new Promise(function (resolve, reject)  {
+            dvizh.cart.sendData({}, url).then(function(json) {
+                return resolve(json);
+            }, function(error) {
+                return reject(error);
+            })
+        })
+
     },
     sendData: function (data, link) {
         if (!link) {
@@ -211,31 +247,34 @@ dvizh.cart = {
         data.elementsListWidgetParams = dvizh.cart.elementsListWidgetParams;
         data[dvizh.cart.csrf_param] = dvizh.cart.csrf;
 
-        jQuery('.dvizh-cart-block').css({'opacity': '0.3'});
-        jQuery('.dvizh-cart-count').css({'opacity': '0.3'});
-        jQuery('.dvizh-cart-price').css({'opacity': '0.3'});
+        jQuery('.dvizh-cart-block, .dvizh-cart-count, .dvizh-cart-price').css({'opacity': '0.3'});
 
-        jQuery.post(link, data,
-            function (json) {
-                jQuery('.dvizh-cart-block').css({'opacity': '1'});
-                jQuery('.dvizh-cart-count').css({'opacity': '1'});
-                jQuery('.dvizh-cart-price').css({'opacity': '1'});
+        return new Promise(function (resolve, reject) {
 
-                if (json.result == 'fail') {
-                    console.log(json.error);
-                }
-                else {
-                    dvizh.cart.renderCart(json);
-                    $(document).trigger('dvizhCartChanged');
-                }
+            jQuery.post(link, data,
+                function (json) {
+                    jQuery('.dvizh-cart-block, .dvizh-cart-count, .dvizh-cart-price').css({'opacity': '1'});
 
-            }, "json");
+                    if (json.result === 'fail') {
+                        console.log(json.error);
+                        return reject(json.error);
+                    }
+                    else {
+                        dvizh.cart.renderCart(json);
+                        $(document).trigger('dvizhCartChanged', json);
+                        return resolve(json);
+                    }
+
+                }, "json");
+        });
+
+
 
         return false;
     },
     renderCart: function (json) {
         if (!json) {
-            var json = {};
+            json = {};
             jQuery.post('/cart/default/info', {},
                 function (answer) {
                     json = answer;
